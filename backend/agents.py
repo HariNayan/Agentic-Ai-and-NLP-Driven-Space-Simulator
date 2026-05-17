@@ -188,14 +188,14 @@ async def call_openrouter_stream(prompt: str, system_prompt: str, max_tokens: in
     yield "RATE_LIMITED"
 
 
-async def orchestrator_agent(message: str, planet: str = "Earth") -> dict:
+async def orchestrator_agent(message: str, planet: str = "Earth", session_id: str = "default") -> dict:
     """Classify user intent."""
     prompt = f"User message: {message}\nCurrently viewing: {planet}"
     
     try:
         content = await call_openrouter(prompt, SYSTEM_PROMPT_ORCHESTRATOR.format(message=message, planet=planet), max_tokens=100)
         if content == "RATE_LIMITED":
-            fallback = determine_navigation_fallback(message, "default")
+            fallback = determine_navigation_fallback(message, session_id)
             msg_lower = message.lower()
             if any(w in msg_lower for w in ["go", "take", "travel", "navigate", "visit"]) or fallback.target.lower() != planet.lower():
                 return {"intent": "navigate", "target": fallback.target}

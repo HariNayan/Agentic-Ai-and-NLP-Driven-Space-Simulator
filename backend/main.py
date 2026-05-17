@@ -1,11 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Literal
 import json
 import os
 import traceback
-import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -30,12 +30,43 @@ app.add_middleware(
 )
 
 
+class ChatHistoryItem(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
     selected_planet: str = "Earth"
     user_level: str = "beginner"
     session_id: str = "default"
-    history: list = []
+    history: list[ChatHistoryItem] = Field(default_factory=list)
+
+
+def format_request_history(history: list[ChatHistoryItem], max_turns: int = 10) -> str:
+    """Format browser-supplied history so each chat call is self-contained."""
+    formatted = []
+    for item in history[-max_turns:]:
+        content = item.content.strip()
+        if not content:
+            continue
+        role = "User" if item.role == "user" else "Assistant"
+        formatted.append(f"{role}: {content[:2000]}")
+    return "\n".join(formatted)
+
+
+def seed_memory_from_request(session_id: str, history: list[ChatHistoryItem]) -> None:
+    """Refresh process-local memory from the browser's latest view of the chat."""
+    if not history:
+        return
+
+    from agents import memory
+
+    memory.clear(session_id)
+    for item in history[-memory.max_turns:]:
+        content = item.content.strip()
+        if content:
+            memory.add_message(session_id, item.role, content[:2000])
 
 
 @app.post("/api/chat")
@@ -53,14 +84,15 @@ async def chat(request: ChatRequest):
             SYSTEM_PROMPT_EXPLAINER_ADVANCED,
             memory
         )
-        
-        memory.add_message(request.session_id, "user", request.message)
-        history = memory.format_history(request.session_id)
+        seed_memory_from_request(request.session_id, request.history)
+        history = memory.format_history(request.session_id) or format_request_history(request.history)
         current_planet = request.selected_planet
         
-        intent_data = await orchestrator_agent(request.message, current_planet)
+        intent_data = await orchestrator_agent(request.message, current_planet, request.session_id)
         intent = intent_data.get("intent", "explain")
         target = intent_data.get("target", current_planet)
+
+        memory.add_message(request.session_id, "user", request.message)
         
         if intent == "rate_limited":
             return JSONResponse(content={

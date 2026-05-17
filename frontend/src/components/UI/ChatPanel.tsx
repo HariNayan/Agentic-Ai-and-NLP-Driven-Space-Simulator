@@ -83,12 +83,23 @@ export default memo(function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory]);
 
-  const doChatRequest = useCallback(async (retryCount = 0) => {
-    const userMessage = input.trim();
+  const doChatRequest = useCallback(async (
+    retryCount = 0,
+    messageOverride?: string,
+    shouldAddUserMessage = true
+  ) => {
+    const userMessage = (messageOverride ?? input).trim();
     if (!userMessage || isProcessing) return;
 
-    addChatMessage('user', userMessage);
-    setInput('');
+    const requestHistory = chatHistory
+      .filter((msg) => msg.content && msg.content !== '__QUIZ__')
+      .slice(-10)
+      .map(({ role, content }) => ({ role, content }));
+
+    if (shouldAddUserMessage) {
+      addChatMessage('user', userMessage);
+      setInput('');
+    }
     setProcessing(true);
 
     try {
@@ -100,6 +111,7 @@ export default memo(function ChatPanel() {
           selected_planet: selectedPlanet,
           user_level: 'beginner',
           session_id: sessionId.current,
+          history: requestHistory,
         }),
       });
 
@@ -112,9 +124,12 @@ export default memo(function ChatPanel() {
             chatHistory: state.chatHistory.slice(0, -1)
           }));
           setProcessing(false);
-          return doChatRequest(retryCount + 1);
+          return doChatRequest(retryCount + 1, userMessage, false);
         }
-        console.error('Chat API error:', res.status);
+        addChatMessage(
+          'assistant',
+          `AI service returned ${res.status}. Please try again in a moment.`
+        );
         return;
       }
 
@@ -126,8 +141,46 @@ export default memo(function ChatPanel() {
 
         const decoder = new TextDecoder();
         let aiText = '';
+        let pending = '';
 
         const tempId = `msg_${Date.now()}`;
+
+        const handleSseLine = async (line: string) => {
+          const normalized = line.trimEnd();
+          if (!normalized.startsWith('data: ')) return false;
+
+          const payload = normalized.slice(6).trim();
+          if (payload === '[DONE]') return true;
+
+          try {
+            const data = JSON.parse(payload);
+
+            if (data.token && data.token.includes('rate') && data.token.includes('limit')) {
+              if (retryCount < 1) {
+                await new Promise(r => setTimeout(r, 5000));
+                useSpaceStore.setState(state => ({
+                  chatHistory: state.chatHistory.filter(m => m.id !== tempId)
+                }));
+                setProcessing(false);
+                await doChatRequest(retryCount + 1, userMessage, false);
+                return true;
+              }
+            }
+
+            if (data.token) {
+              aiText += data.token;
+              useSpaceStore.setState((state) => ({
+                chatHistory: state.chatHistory.map((m) =>
+                  m.id === tempId ? { ...m, content: aiText } : m
+                ),
+              }));
+            }
+          } catch {
+            // Ignore malformed SSE payloads; the stream may continue with valid chunks.
+          }
+
+          return false;
+        };
 
         useSpaceStore.setState((state) => ({
           chatHistory: [
@@ -144,39 +197,20 @@ export default memo(function ChatPanel() {
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            pending += decoder.decode();
+            break;
+          }
 
-          const lines = decoder.decode(value, { stream: true }).split('\n');
+          pending += decoder.decode(value, { stream: true });
+          const lines = pending.split('\n');
+          pending = lines.pop() ?? '';
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const payload = line.slice(6).trim();
-              if (payload === '[DONE]') break;
-              try {
-                const data = JSON.parse(payload);
-
-                if (data.token && data.token.includes('rate') && data.token.includes('limit')) {
-                  if (retryCount < 1) {
-                    await new Promise(r => setTimeout(r, 5000));
-                    useSpaceStore.setState(state => ({
-                      chatHistory: state.chatHistory.filter(m => m.id !== tempId)
-                    }));
-                    setProcessing(false);
-                    return doChatRequest(retryCount + 1);
-                  }
-                }
-
-                if (data.token) {
-                  aiText += data.token;
-                  useSpaceStore.setState((state) => ({
-                    chatHistory: state.chatHistory.map((m) =>
-                      m.id === tempId ? { ...m, content: aiText } : m
-                    ),
-                  }));
-                }
-              } catch {}
-            }
+            if (await handleSseLine(line)) return;
           }
         }
+
+        if (pending.trim() && await handleSseLine(pending)) return;
 
         useSpaceStore.setState((state) => ({
           chatHistory: state.chatHistory.map((m) =>
@@ -224,7 +258,7 @@ export default memo(function ChatPanel() {
     } finally {
       setProcessing(false);
     }
-  }, [input, isProcessing, addChatMessage, setProcessing, selectedPlanet]);
+  }, [input, isProcessing, addChatMessage, setProcessing, selectedPlanet, chatHistory]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
