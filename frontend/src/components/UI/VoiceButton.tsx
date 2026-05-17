@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect, useRef, memo } from 'react';
 import { useSpaceStore } from '@/store/spaceStore';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+
 interface SpeechRecognitionType {
   continuous: boolean;
   interimResults: boolean;
@@ -136,7 +138,7 @@ export default memo(function VoiceButton() {
     try {
       const sessionId = useSpaceStore.getState().chatHistory[0]?.id?.replace('msg_', '') || 'default';
       
-      const res = await fetch('http://localhost:8000/api/chat', {
+      const res = await fetch(`${BACKEND_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

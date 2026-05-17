@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useSpaceStore, useChatSelector, useProcessingSelector } from '@/store/spaceStore';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+
 interface ChatMessageWithStreaming {
   id: string;
   role: 'user' | 'assistant';
@@ -90,7 +92,7 @@ export default memo(function ChatPanel() {
     setProcessing(true);
 
     try {
-      const res = await fetch('http://localhost:8000/api/chat', {
+      const res = await fetch(`${BACKEND_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
