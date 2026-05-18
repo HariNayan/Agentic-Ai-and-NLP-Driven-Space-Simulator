@@ -1,43 +1,79 @@
 'use client';
 import { useEffect, useState } from 'react';
 
+interface VoyagerData {
+  name: string;
+  distKm: number;
+}
+
 export default function VoyagerPanel() {
-  const [distV1, setDistV1] = useState(24350000000);
-  const [distV2, setDistV2] = useState(20280000000);
-  
+  const [data, setData] = useState<[VoyagerData | null, VoyagerData | null]>([null, null]);
+  const [error, setError] = useState(false);
+
   useEffect(() => {
-    const t = setInterval(() => {
-       setDistV1(v => v + 17.04);
-       setDistV2(v => v + 15.34);
-    }, 1000);
-    return () => clearInterval(t);
+    let mounted = true;
+    const fetchVoyager = async () => {
+      try {
+        const r = await fetch('/api/voyager');
+        if (!r.ok) throw new Error('API error');
+        const d = await r.json();
+        if (mounted) setData([d.voyager1, d.voyager2]);
+      } catch {
+        if (mounted) setError(true);
+      }
+    };
+    fetchVoyager();
+    const iv = setInterval(fetchVoyager, 60_000);
+    return () => { mounted = false; clearInterval(iv); };
   }, []);
+
+  const fmtDist = (km: number) => {
+    const au = km / 149597870.7;
+    return `${au.toFixed(3)} AU`;
+  };
+
+  if (error) {
+    return (
+      <div style={{ padding: '8px 12px', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"Courier New", monospace', fontSize: '9px', color: '#c0473a' }}>
+        ⚡ VOYAGER TELEMETRY OFFLINE
+      </div>
+    );
+  }
+
+  const v1 = data[0];
+  const v2 = data[1];
 
   return (
     <div style={{ padding: '8px 12px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '8px', fontFamily: '"Courier New", monospace' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: '10px', color: '#ffaa00', fontWeight: 'bold' }}>VOYAGER 1</div>
-          <div style={{ fontSize: '7px', color: '#8899aa' }}>INTERSTELLAR SPACE</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '11px', color: '#fff' }}>{Math.floor(distV1).toLocaleString()} KM</div>
-          <div style={{ fontSize: '7px', color: '#4a9fd8' }}>+17.04 km/s</div>
-        </div>
-      </div>
-      
-      <div style={{ height: '1px', background: '#161a26' }} />
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: '10px', color: '#ffaa00', fontWeight: 'bold' }}>VOYAGER 2</div>
-          <div style={{ fontSize: '7px', color: '#8899aa' }}>INTERSTELLAR SPACE</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '11px', color: '#fff' }}>{Math.floor(distV2).toLocaleString()} KM</div>
-          <div style={{ fontSize: '7px', color: '#4a9fd8' }}>+15.34 km/s</div>
-        </div>
-      </div>
+      {!v1 && !v2 ? (
+        <div style={{ fontSize: '9px', color: '#4a5070' }}>Acquiring signal...</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '10px', color: '#ffaa00', fontWeight: 'bold' }}>VOYAGER 1</div>
+              <div style={{ fontSize: '7px', color: '#8899aa' }}>INTERSTELLAR SPACE</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '11px', color: '#fff' }}>{v1 ? fmtDist(v1.distKm) : '--'}</div>
+              <div style={{ fontSize: '7px', color: '#4a9fd8' }}>{v1 ? `${(v1.distKm / 1e6).toFixed(0)}M km` : '--'}</div>
+            </div>
+          </div>
+
+          <div style={{ height: '1px', background: '#161a26' }} />
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '10px', color: '#ffaa00', fontWeight: 'bold' }}>VOYAGER 2</div>
+              <div style={{ fontSize: '7px', color: '#8899aa' }}>INTERSTELLAR SPACE</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '11px', color: '#fff' }}>{v2 ? fmtDist(v2.distKm) : '--'}</div>
+              <div style={{ fontSize: '7px', color: '#4a9fd8' }}>{v2 ? `${(v2.distKm / 1e6).toFixed(0)}M km` : '--'}</div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

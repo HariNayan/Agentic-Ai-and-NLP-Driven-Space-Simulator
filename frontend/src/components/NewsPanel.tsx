@@ -14,6 +14,7 @@ interface Article {
 export default function NewsPanel() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -27,7 +28,7 @@ export default function NewsPanel() {
           setLoading(false);
         }
       } catch (err) {
-        if (isMounted) setLoading(false);
+        if (isMounted) { setLoading(false); setError(true); }
       }
     };
 
@@ -68,7 +69,12 @@ export default function NewsPanel() {
             Loading...
           </div>
         )}
-        {articles.map((a) => (
+          {error && !loading && (
+            <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#c0473a' }}>
+              ⚠ NEWS FEED UNAVAILABLE
+            </div>
+          )}
+          {!error && articles.map((a) => (
           <div
             key={a.id}
             onClick={() => window.open(a.url, '_blank')}
@@ -107,6 +113,11 @@ export default function NewsPanel() {
             </div>
           </div>
         ))}
+        {!loading && !error && articles.length === 0 && (
+          <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#4a5070' }}>
+            NO ARTICLES
+          </div>
+        )}
       </div>
     </div>
   );

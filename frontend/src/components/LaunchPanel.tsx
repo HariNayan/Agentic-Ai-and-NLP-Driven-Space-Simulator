@@ -13,6 +13,8 @@ interface Launch {
 
 export default memo(function LaunchPanel() {
   const [launches, setLaunches] = useState<Launch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -23,9 +25,10 @@ export default memo(function LaunchPanel() {
         const data = await r.json();
         if (isMounted) {
           setLaunches(data?.results ?? []);
+          setLoading(false);
         }
       } catch (err) {
-        if (isMounted) setLaunches([]);
+        if (isMounted) { setLoading(false); setError(true); }
       }
     };
 
@@ -68,19 +71,22 @@ export default memo(function LaunchPanel() {
       }}
     >
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {launches.length === 0 && (
-          <div
-            style={{
-              padding: '8px',
-              fontFamily: "'Courier New', monospace",
-              fontSize: '9px',
-              color: '#4a5070',
-            }}
-          >
+        {loading && (
+          <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#4a5070' }}>
             Loading...
           </div>
         )}
-        {launches.map((l) => (
+        {error && !loading && (
+          <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#c0473a' }}>
+            ⚠ LAUNCH DATA UNAVAILABLE
+          </div>
+        )}
+        {!error && !loading && launches.length === 0 && (
+          <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#4a5070' }}>
+            NO UPCOMING LAUNCHES
+          </div>
+        )}
+        {!error && launches.map((l) => (
           <div
             key={l.id}
             style={{

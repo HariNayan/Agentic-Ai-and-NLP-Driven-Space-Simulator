@@ -19,6 +19,7 @@ interface Asteroid {
 export default memo(function AsteroidPanel() {
   const [asteroids, setAsteroids] = useState<Asteroid[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,7 +38,7 @@ export default memo(function AsteroidPanel() {
           setLoading(false);
         }
       } catch (err) {
-        if (isMounted) setLoading(false);
+        if (isMounted) { setLoading(false); setError(true); }
       }
     };
     
@@ -71,7 +72,17 @@ export default memo(function AsteroidPanel() {
             Loading...
           </div>
         )}
-        {asteroids.map((a) => {
+        {error && !loading && (
+          <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#c0473a' }}>
+            ⚠ ASTEROID DATA UNAVAILABLE
+          </div>
+        )}
+        {!error && asteroids.length === 0 && !loading && (
+          <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#4a5070' }}>
+            NO ASTEROIDS TODAY
+          </div>
+        )}
+        {!error && asteroids.map((a) => {
           const hazardous = a?.is_potentially_hazardous_asteroid || false;
           const size = a?.estimated_diameter?.kilometers?.estimated_diameter_max?.toFixed(2) ?? '--';
           const dist = parseFloat(

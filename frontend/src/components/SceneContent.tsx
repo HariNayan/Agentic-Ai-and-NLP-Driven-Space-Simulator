@@ -3,33 +3,7 @@
 import { useEffect, useRef, useState, useCallback, memo } from 'react';
 
 import { useSpaceStore } from '@/store/spaceStore';
-
-interface PlanetConfig {
-  name: string;
-  textureKey: string;
-  fallbackColor: number;
-  emissive: number;
-  size: number;
-  orbitRadius: number;
-  speed: number;
-  nasaId: string;
-  shininess?: number;
-  atmosphere?: number;
-  hasSaturnRings?: boolean;
-  cloudsKey?: string;
-  banded?: boolean;
-}
-
-const PLANET_DATA: PlanetConfig[] = [
-  { name: 'Mercury', textureKey: 'mercury', fallbackColor: 0xa09088, emissive: 0x100a00, size: 0.35, orbitRadius: 5.0,  speed: 0.0172, nasaId: '199', shininess: 15 },
-  { name: 'Venus',   textureKey: 'venus',   fallbackColor: 0xe8d070, emissive: 0x604000, size: 0.75, orbitRadius: 7.8,  speed: 0.0125, nasaId: '299', shininess: 50, atmosphere: 0xffa040 },
-  { name: 'Earth',   textureKey: 'earth',   fallbackColor: 0x3a8fd0, emissive: 0x001840, size: 0.85, orbitRadius: 11.0, speed: 0.0100, nasaId: '399', shininess: 80, atmosphere: 0x4488ff, cloudsKey: 'earth_clouds' },
-  { name: 'Mars',    textureKey: 'mars',    fallbackColor: 0xc84020, emissive: 0x500800, size: 0.55, orbitRadius: 15.0, speed: 0.0081, nasaId: '499', shininess: 20, atmosphere: 0xff4400 },
-  { name: 'Jupiter', textureKey: 'jupiter', fallbackColor: 0xc89050, emissive: 0x301800, size: 2.20, orbitRadius: 21.0, speed: 0.0044, nasaId: '599', shininess: 30 },
-  { name: 'Saturn',  textureKey: 'saturn',  fallbackColor: 0xe0d080, emissive: 0x302000, size: 1.90, orbitRadius: 27.0, speed: 0.0034, nasaId: '699', shininess: 40, hasSaturnRings: true },
-  { name: 'Uranus',  textureKey: 'uranus',  fallbackColor: 0x70dce0, emissive: 0x003030, size: 1.40, orbitRadius: 32.5, speed: 0.0020, nasaId: '799', shininess: 60, atmosphere: 0x00eeff },
-  { name: 'Neptune', textureKey: 'neptune', fallbackColor: 0x4060e8, emissive: 0x001040, size: 1.30, orbitRadius: 37.0, speed: 0.0010, nasaId: '899', shininess: 70, atmosphere: 0x2255ff },
-];
+import { PLANET_DATA, MOON_DATA, ORBITAL_ELEMENTS, getCurrentAngle, solveKepler, ellipticalPosition, type MoonConfig } from '@/utils/orbitalMath';
 
 export default memo(function SceneContent() {
   const selectedPlanet = useSpaceStore((state) => state.currentCameraTarget);
@@ -44,8 +18,9 @@ export default memo(function SceneContent() {
   const cameraRef       = useRef<any>(null);
   const controlsRef     = useRef<any>(null);
   const planetMeshesRef = useRef<Map<string, any>>(new Map());
+  const moonMeshesRef   = useRef<Map<string, any>>(new Map());
   const anglesRef       = useRef<Map<string, number>>(
-    new Map(PLANET_DATA.map(p => [p.name, Math.random() * Math.PI * 2]))
+    new Map(PLANET_DATA.map(p => [p.name, getCurrentAngle(p.name)]))
   );
   const targetAnglesRef = useRef<Map<string, number | null>>(
     new Map(PLANET_DATA.map(p => [p.name, null]))
@@ -236,11 +211,12 @@ export default memo(function SceneContent() {
 
       // ── Orbit rings + planets ────────────────────────────────────────────
       for (const p of PLANET_DATA) {
-        // Orbit ring
+        // Elliptical orbit ring
         const pts: any[] = [];
         for (let i = 0; i <= 320; i++) {
-          const a = (i / 320) * Math.PI * 2;
-          pts.push(new THREE.Vector3(Math.cos(a) * p.orbitRadius, 0, Math.sin(a) * p.orbitRadius));
+          const M = (i / 320) * Math.PI * 2;
+          const pos = ellipticalPosition(M, p.orbitRadius, p.eccentricity, p.perihelionLon);
+          pts.push(new THREE.Vector3(pos.x, 0, pos.z));
         }
         scene.add(new THREE.Line(
           new THREE.BufferGeometry().setFromPoints(pts),
@@ -259,8 +235,10 @@ export default memo(function SceneContent() {
 
         const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.size, 64, 64), mat);
         mesh.userData = { name: p.name, cfg: p };
-        const angle = anglesRef.current.get(p.name) ?? 0;
-        mesh.position.set(Math.cos(angle) * p.orbitRadius, 0, Math.sin(angle) * p.orbitRadius);
+        const initAngle = anglesRef.current.get(p.name) ?? 0;
+        const initPos = ellipticalPosition(initAngle, p.orbitRadius, p.eccentricity, p.perihelionLon);
+        mesh.position.set(initPos.x, 0, initPos.z);
+        mesh.rotation.z = p.axialTilt;
         scene.add(mesh);
         planetMeshesRef.current.set(p.name, mesh);
 
@@ -317,7 +295,6 @@ export default memo(function SceneContent() {
           mesh.add(rInner);
 
           if (!saturnRingTex) {
-            // Fallback: add second faded ring band
             const rOuter = new THREE.Mesh(
               new THREE.RingGeometry(p.size * 2.85, p.size * 3.2, 80),
               new THREE.MeshBasicMaterial({ color: 0xb89840, side: THREE.DoubleSide, transparent: true, opacity: 0.35 })
@@ -326,6 +303,16 @@ export default memo(function SceneContent() {
             rOuter.rotation.y = 0.2;
             mesh.add(rOuter);
           }
+        }
+
+        // Moons
+        const moonsForPlanet = MOON_DATA.filter(m => m.parent === p.name);
+        for (const moon of moonsForPlanet) {
+          const moonMat = new THREE.MeshStandardMaterial({ color: moon.color, roughness: 0.9 });
+          const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(moon.size, 20, 20), moonMat);
+          moonMesh.userData = { isMoon: true, cfg: moon, angle: Math.random() * Math.PI * 2 };
+          moonMeshesRef.current.set(moon.name, moonMesh);
+          mesh.add(moonMesh);
         }
       }
 
@@ -344,8 +331,9 @@ export default memo(function SceneContent() {
         const hits = raycaster.intersectObjects([sunMesh, ...planetMeshesRef.current.values()], true);
         if (!hits.length) return;
         let obj: any = hits[0].object;
-        while (obj && !obj.userData?.name) obj = obj.parent;
-        if (obj?.userData?.name) onClickRef.current(obj.userData.name);
+        while (obj && !obj.userData?.name && !obj.userData?.isMoon) obj = obj.parent;
+        if (obj?.userData?.isMoon) onClickRef.current(obj.userData.cfg.name);
+        else if (obj?.userData?.name) onClickRef.current(obj.userData.name);
       };
       const onMouseMove = (e: MouseEvent) => {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -386,15 +374,26 @@ export default memo(function SceneContent() {
             angle += (((tgt - angle + Math.PI) % (Math.PI * 2)) - Math.PI) * 0.0008;
           }
           anglesRef.current.set(p.name, angle);
-          mesh.position.set(Math.cos(angle) * p.orbitRadius, 0, Math.sin(angle) * p.orbitRadius);
+          const pos = ellipticalPosition(angle, p.orbitRadius, p.eccentricity, p.perihelionLon);
+          mesh.position.set(pos.x, 0, pos.z);
 
-          // Planet self-rotation
+          // Planet self-rotation (maintain axial tilt)
           const spinSpeed = p.name === 'Jupiter' ? 0.55 : p.name === 'Saturn' ? 0.22 : 0.32;
+          mesh.rotation.x = p.axialTilt;
           mesh.rotation.y += delta * spinSpeed;
 
-          // Cloud layer rotation (slightly faster)
+          // Cloud layer rotation
           mesh.children.forEach((child: any) => {
             if (child.userData?.isCloud) child.rotation.y += delta * 0.45;
+          });
+
+          // Moon orbital motion
+          mesh.children.forEach((child: any) => {
+            const moonCfg = child.userData?.cfg as MoonConfig | undefined;
+            if (!moonCfg) return;
+            child.userData.angle = (child.userData.angle ?? 0) + moonCfg.speed * delta;
+            const a = child.userData.angle;
+            child.position.set(Math.cos(a) * moonCfg.orbitRadius, Math.sin(a) * moonCfg.orbitRadius * 0.3, Math.sin(a) * moonCfg.orbitRadius * 0.8);
           });
         }
 
@@ -426,20 +425,22 @@ export default memo(function SceneContent() {
           }
         }
 
-        // Smooth camera target → selected planet
-        const selMesh = sel === 'Sun' ? sunMeshRef.current : planetMeshesRef.current.get(sel);
+        // Smooth camera target → selected planet or moon
+        const selIsMoon = !planetMeshesRef.current.has(sel) && moonMeshesRef.current.has(sel);
+        const selMesh = sel === 'Sun' ? sunMeshRef.current : (planetMeshesRef.current.get(sel) || moonMeshesRef.current.get(sel));
         if (selMesh && controlsRef.current) {
           const ct = controlsRef.current.target;
-          ct.x += (selMesh.position.x - ct.x) * 0.04;
-          ct.y += (selMesh.position.y - ct.y) * 0.04;
-          ct.z += (selMesh.position.z - ct.z) * 0.04;
+          const pos = selIsMoon ? selMesh.getWorldPosition(new THREE.Vector3()) : selMesh.position;
+          ct.x += (pos.x - ct.x) * 0.04;
+          ct.y += (pos.y - ct.y) * 0.04;
+          ct.z += (pos.z - ct.z) * 0.04;
         }
 
-        // Fly camera close to planet when zoomToSelected is true
+        // Fly camera close to planet/moon when zoomToSelected is true
         if (zoomToSelectedRef.current && selMesh && cameraRef.current) {
           const cfg = PLANET_DATA.find(p => p.name === sel);
           const closeD = cfg ? cfg.size * 5 + 3 : 8;
-          const tgt = selMesh.position;
+          const tgt = selIsMoon ? selMesh.getWorldPosition(new THREE.Vector3()) : selMesh.position;
           const desired = {
             x: tgt.x + closeD * 0.6,
             y: tgt.y + closeD * 0.4,
@@ -453,7 +454,8 @@ export default memo(function SceneContent() {
 
         // Floating label: update position via DOM ref without React re-render
         if (labelRef.current && selMesh && mountRef.current) {
-          const vec = selMesh.position.clone().project(camera);
+          const pos = selIsMoon ? selMesh.getWorldPosition(new THREE.Vector3()) : selMesh.position;
+          const vec = pos.clone().project(camera);
           const mw  = mountRef.current.clientWidth;
           const mh  = mountRef.current.clientHeight;
           labelRef.current.style.left    = `${(vec.x + 1) / 2 * mw}px`;
@@ -476,6 +478,7 @@ export default memo(function SceneContent() {
         renderer.dispose();
         if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
         planetMeshesRef.current.clear();
+        moonMeshesRef.current.clear();
         rendererRef.current = cameraRef.current = controlsRef.current = sceneRef.current = null;
       };
     })();

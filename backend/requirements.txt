@@ -3,3 +3,6 @@ uvicorn
 pydantic
 python-dotenv
 httpx
+pytest==8.3.5
+pytest-asyncio==0.25.3
+pytest-httpx==0.35.0

@@ -35,19 +35,20 @@ function handleQuizAnswer(
 
 function renderQuizMessage(msg: ChatMessageWithStreaming, i: number) {
   if (msg.content !== '__QUIZ__' || !msg.quiz) return null;
+  const quiz = msg.quiz;
 
   return (
     <div key={msg.id || i} className="quiz-card">
-      <p className="quiz-question">{msg.quiz.question}</p>
+      <p className="quiz-question">{quiz.question}</p>
       <div className="quiz-options">
-        {msg.quiz.options.map((option, idx) => (
+        {quiz.options.map((option, idx) => (
           <button
             key={idx}
-            onClick={() => handleQuizAnswer(option, msg.quiz, msg.id)}
+            onClick={() => handleQuizAnswer(option, quiz, msg.id)}
             disabled={msg.answered}
             className={
               msg.answered
-                ? option === msg.quiz.correct
+                ? option === quiz.correct
                   ? 'correct'
                   : option === msg.selectedAnswer
                   ? 'wrong'
@@ -59,7 +60,7 @@ function renderQuizMessage(msg: ChatMessageWithStreaming, i: number) {
           </button>
         ))}
       </div>
-      {msg.answered && <p className="quiz-explanation">{msg.quiz.explanation}</p>}
+      {msg.answered && <p className="quiz-explanation">{quiz.explanation}</p>}
     </div>
   );
 }

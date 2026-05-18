@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, Suspense, useState, useEffect, useCallback } from 'react';
+import { memo, Suspense, useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 const SceneContent = dynamic(() => import('@/components/SceneContent'), {
   ssr: false,
@@ -30,8 +30,6 @@ const SceneContent = dynamic(() => import('@/components/SceneContent'), {
 });
 
 import ChatPanel from '@/components/UI/ChatPanel';
-import LiveDataPanel from '@/components/UI/LiveDataPanel';
-import StatusBar from '@/components/UI/StatusBar';
 import NewsPanel from '@/components/NewsPanel';
 import ISSTracker from '@/components/ISSTracker';
 import AsteroidPanel from '@/components/AsteroidPanel';
@@ -40,11 +38,11 @@ import PlanetInfoPanel from '@/components/UI/PlanetInfoPanel';
 import SolarFlaresPanel from '@/components/panels/SolarFlaresPanel';
 import MarsRoverPanel from '@/components/panels/MarsRoverPanel';
 import DeepSpaceNetworkPanel from '@/components/panels/DeepSpaceNetworkPanel';
-import JWSTPanel from '@/components/panels/JWSTPanel';
+import MarsWeatherPanel from '@/components/panels/MarsWeatherPanel';
 import ExoplanetPanel from '@/components/panels/ExoplanetPanel';
-import ArtemisPanel from '@/components/panels/ArtemisPanel';
+import EphemerisPanel from '@/components/panels/EphemerisPanel';
 import VoyagerPanel from '@/components/panels/VoyagerPanel';
-import PulsarPanel from '@/components/panels/PulsarPanel';
+import APODPanel from '@/components/panels/APODPanel';
 import { useSpaceStore } from '@/store/spaceStore';
 
 /** Completely isolated overlay — reads store, never causes Home to re-render */
@@ -87,20 +85,6 @@ const Panel = memo(function Panel({ children, header }: { children: React.ReactN
   );
 });
 
-const LockedPanel = memo(function LockedPanel({ title, category }: { title: string, category: string }) {
-  return (
-    <Panel header={{ title, status: category, statusColor: '#333', locked: true }}>
-      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.25 }}>
-        <span style={{ fontSize: '10px', marginBottom: '6px' }}>🔒</span>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: '7px', color: '#a0a0a0', textTransform: 'uppercase' }}>Sign in to unlock</span>
-        <button style={{ marginTop: '8px', background: '#cca022', border: 'none', color: '#000', fontSize: '7px', padding: '3px 8px', cursor: 'pointer', fontFamily: "'Courier New', monospace", fontWeight: 'bold' }}>
-          AUTHORIZE
-        </button>
-      </div>
-    </Panel>
-  );
-});
-
 const EmbedFallback = memo(function EmbedFallback() {
   return (
     <div
@@ -129,6 +113,7 @@ const EmbedFallback = memo(function EmbedFallback() {
 
 const Ticker = memo(function Ticker() {
   const [headlines, setHeadlines] = useState<string[]>([]);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch('https://api.spaceflightnewsapi.net/v4/articles/?limit=5')
@@ -137,7 +122,7 @@ const Ticker = memo(function Ticker() {
         const titles = (data.results ?? []).map((a: { title: string }) => a.title);
         setHeadlines(titles);
       })
-      .catch(() => { });
+      .catch(() => setError(true));
   }, []);
 
   const text = headlines.join('  ///  ');
@@ -161,7 +146,7 @@ const Ticker = memo(function Ticker() {
           animation: text ? 'scroll 30s linear infinite' : 'none',
         }}
       >
-        {text || 'Scanning feeds...'}
+        {error ? '⚠ NEWS FEED UNAVAILABLE' : text || 'Scanning feeds...'}
       </span>
     </div>
   );
@@ -203,13 +188,13 @@ const TargetDisplay = memo(function TargetDisplay() {
 
 const Home = memo(function Home() {
 
+  useEffect(() => { window.scrollTo(0, 0); }, []);
+
   return (
     <div
       style={{
         width: '100%',
         minHeight: '100vh',
-        height: '100%',
-        overflowY: 'scroll',
         background: '#060810',
         display: 'flex',
         flexDirection: 'column',
@@ -255,15 +240,6 @@ const Home = memo(function Home() {
             ● AGENTIC AI: ONLINE
           </span>
           <TargetDisplay />
-          <span
-            style={{
-              fontFamily: "'Courier New', monospace",
-              fontSize: '8px',
-              color: '#4a5070',
-            }}
-          >
-            Latency: 45ms
-          </span>
           <ServerTime />
         </div>
       </div>
@@ -357,8 +333,8 @@ const Home = memo(function Home() {
             </Panel>
           </div>
           <div style={{ gridColumn: 'span 1' }}>
-            <Panel header={{ title: 'JAMES WEBB TELEMETRY', status: 'JWST OPS', statusColor: '#00ff88' }}>
-              <JWSTPanel />
+            <Panel header={{ title: 'MARS WEATHER // InSight', status: 'LIVE RELAY', statusColor: '#c1440e' }}>
+              <MarsWeatherPanel />
             </Panel>
           </div>
 
@@ -368,23 +344,23 @@ const Home = memo(function Home() {
             </Panel>
           </div>
           <div style={{ gridColumn: 'span 1' }}>
-            <Panel header={{ title: 'EXOPLANETS', status: 'TESS MOC', statusColor: '#4a9fd8' }}>
+            <Panel header={{ title: 'EXOPLANETS', status: 'NASA ARCHIVE', statusColor: '#4a9fd8' }}>
               <ExoplanetPanel />
             </Panel>
           </div>
           <div style={{ gridColumn: 'span 1' }}>
-            <Panel header={{ title: 'ARTEMIS OPS', status: 'LUNAR GATEWAY', statusColor: '#00ff88' }}>
-              <ArtemisPanel />
+            <Panel header={{ title: 'SOLAR SYSTEM EPHEMERIS', status: 'JPL HORIZONS', statusColor: '#6a9fd8' }}>
+              <EphemerisPanel />
             </Panel>
           </div>
           <div style={{ gridColumn: 'span 2' }}>
-            <Panel header={{ title: 'VOYAGER INTERSTELLAR', status: 'VGR-1 / VGR-2', statusColor: '#fff' }}>
+            <Panel header={{ title: 'VOYAGER INTERSTELLAR', status: 'JPL HORIZONS', statusColor: '#fff' }}>
               <VoyagerPanel />
             </Panel>
           </div>
           <div style={{ gridColumn: 'span 1' }}>
-            <Panel header={{ title: 'PULSAR TIMING', status: 'CHANDRA X-RAY', statusColor: '#00eeff' }}>
-              <PulsarPanel />
+            <Panel header={{ title: 'ASTRONOMY PICTURE OF THE DAY', status: 'NASA APOD', statusColor: '#e8d5a3' }}>
+              <APODPanel />
             </Panel>
           </div>
         </div>

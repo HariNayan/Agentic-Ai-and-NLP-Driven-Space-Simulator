@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -17,7 +18,6 @@
     "next": "^16.2.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "spacekit.js": "^0.1.1",
     "three": "^0.183.2",
     "zustand": "^5.0.0"
   },
@@ -28,6 +28,7 @@
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.9",
     "tailwindcss": "^4.2.2",
-    "typescript": "5.4.5"
+    "typescript": "5.4.5",
+    "vitest": "^4.1.6"
   }
 }

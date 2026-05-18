@@ -9,6 +9,7 @@ interface ISSData {
 
 export default function ISSTracker() {
   const [data, setData] = useState<ISSData | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -20,9 +21,10 @@ export default function ISSTracker() {
         const lat = data?.iss_position?.latitude;
         if (lat !== undefined && isMounted) {
           setData(data);
+          setError(false);
         }
       } catch (err) {
-        console.warn('ISS Tracker rate limit hit. Using cached data if available.');
+        if (isMounted) setError(true);
       }
     };
     fetchISS();
@@ -47,7 +49,7 @@ export default function ISSTracker() {
     { label: 'Hemisphere', value: hemisphere },
     { label: 'Altitude', value: '408 km' },
     { label: 'Speed', value: '7.66 km/s' },
-    { label: 'Updated', value: data ? 'Just now' : '--', valueColor: data ? '#4a8c6f' : undefined },
+    { label: 'Signal', value: error ? 'LOST' : data ? 'LOCKED' : '--', valueColor: error ? '#c0473a' : data ? '#4a8c6f' : undefined },
   ];
 
   return (

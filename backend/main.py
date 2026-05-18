@@ -8,6 +8,8 @@ import os
 import traceback
 from dotenv import load_dotenv
 
+from agents import memory, curriculum, agent_with_tools, build_tool_context_prompt
+
 load_dotenv()
 
 app = FastAPI()
@@ -55,20 +57,6 @@ def format_request_history(history: list[ChatHistoryItem], max_turns: int = 10) 
     return "\n".join(formatted)
 
 
-def seed_memory_from_request(session_id: str, history: list[ChatHistoryItem]) -> None:
-    """Refresh process-local memory from the browser's latest view of the chat."""
-    if not history:
-        return
-
-    from agents import memory
-
-    memory.clear(session_id)
-    for item in history[-memory.max_turns:]:
-        content = item.content.strip()
-        if content:
-            memory.add_message(session_id, item.role, content[:2000])
-
-
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     """Process user chat input - returns JSON for navigate/quiz, stream for explain."""
@@ -77,39 +65,31 @@ async def chat(request: ChatRequest):
             raise HTTPException(status_code=400, detail="Message cannot be empty")
 
         from agents import (
-            orchestrator_agent,
+            orchestrate_intent,
             quiz_agent,
-            call_openrouter_stream,
+            call_llm_stream,
             SYSTEM_PROMPT_EXPLAINER_BEGINNER,
             SYSTEM_PROMPT_EXPLAINER_ADVANCED,
-            memory
         )
-        seed_memory_from_request(request.session_id, request.history)
-        history = memory.format_history(request.session_id) or format_request_history(request.history)
-        current_planet = request.selected_planet
-        
-        intent_data = await orchestrator_agent(request.message, current_planet, request.session_id)
-        intent = intent_data.get("intent", "explain")
-        target = intent_data.get("target", current_planet)
 
-        memory.add_message(request.session_id, "user", request.message)
-        
-        if intent == "rate_limited":
-            return JSONResponse(content={
-                "intent": "error",
-                "message": "AI service is temporarily rate-limited. Please wait a moment and try again.",
-                "error": "rate_limit"
-            })
-        
+        sid = request.session_id
+        history = format_request_history(request.history)
+        intent, target = await orchestrate_intent(request.message, request.selected_planet, history)
+
+        # Store user message in session
+        memory.add_message(sid, "user", request.message)
+
+        # Get curriculum level
+        user_level = curriculum.get_user_level(sid)
+
         if intent == "navigate":
-            memory.add_message(request.session_id, "assistant", f"Navigating to {target}!")
-            
+            memory.add_message(sid, "assistant", f"Navigating to {target}")
             return JSONResponse(content={
                 "intent": "navigate",
                 "target": target,
                 "message": f"Navigating to {target}!"
             })
-        
+
         if intent == "quiz":
             try:
                 quiz = await quiz_agent(target)
@@ -120,28 +100,32 @@ async def chat(request: ChatRequest):
                     "correct": "Mercury",
                     "explanation": "Quiz generation failed. Try again!"
                 }
-            
-            memory.add_message(request.session_id, "assistant", f"Quiz about {target}")
-            
+            memory.add_message(sid, "assistant", f"Quiz about {target}")
             return JSONResponse(content={
                 "intent": "quiz",
                 "quiz": quiz
             })
-        
-        system_prompt = SYSTEM_PROMPT_EXPLAINER_ADVANCED.format(planet=target) if request.user_level == "advanced" else SYSTEM_PROMPT_EXPLAINER_BEGINNER.format(planet=target)
-        full_prompt = f"Conversation history:\n{history}\n\nCurrent question: {request.message}"
-        
+
+        # Explain intent — use tool-aware agent
+        system_prompt = SYSTEM_PROMPT_EXPLAINER_ADVANCED.format(planet=target) if user_level == "advanced" else SYSTEM_PROMPT_EXPLAINER_BEGINNER.format(planet=target)
+        messages, tool_used = await agent_with_tools(request.message, target, user_level, history)
+
+        if tool_used:
+            memory.add_tool_result(sid, tool_used, messages[-1]["content"])
+            explain_prompt = build_tool_context_prompt(history, request.message, [tool_used], [messages[-1]["content"]])
+        else:
+            explain_prompt = f"Conversation history:\n{history}\n\nCurrent question: {request.message}"
+
         async def token_stream():
             full_response = ""
-            async for token in call_openrouter_stream(full_prompt, system_prompt):
+            async for token in call_llm_stream(explain_prompt, system_prompt):
                 if token == "RATE_LIMITED":
                     yield f"data: {json.dumps({'token': 'AI is rate-limited. Please wait and try again.'})}\n\n"
                     return
                 full_response += token
                 yield f"data: {json.dumps({'token': token})}\n\n"
-            
-            memory.add_message(request.session_id, "assistant", full_response)
-        
+            memory.add_message(sid, "assistant", full_response)
+
         return StreamingResponse(
             token_stream(),
             media_type="text/event-stream",
@@ -162,35 +146,21 @@ async def chat(request: ChatRequest):
 
 @app.post("/api/session/clear")
 async def clear_session(session_id: str = "default"):
-    """Clear session memory."""
-    try:
-        from agents import memory
-        memory.clear(session_id)
-        return {"status": "cleared", "session_id": session_id}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error clearing session: {str(e)}")
+    """Clear session memory (no-op — history managed by browser)."""
+    return {"status": "cleared", "session_id": session_id}
 
 
 @app.get("/api/test")
 async def test_ai():
     try:
         import httpx
-        models_to_try = [
-            "google/gemma-4-31b-it:free",
-            "google/gemma-4-26b-a4b-it:free",
-            "qwen/qwen3-next-80b-a3b-instruct:free",
-            "minimax/minimax-m2.5:free"
-        ]
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            for model in models_to_try:
+        from agents import FALLBACK_MODELS, BASE_URL, HEADERS
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            for model in FALLBACK_MODELS:
                 try:
                     r = await client.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
-                            "Content-Type": "application/json"
-                        },
+                        BASE_URL,
+                        headers=HEADERS,
                         json={
                             "model": model,
                             "messages": [{"role": "user", "content": "Say hi"}],
@@ -202,7 +172,7 @@ async def test_ai():
                 except Exception:
                     continue
             
-            return {"status": 429, "error": "All free models are rate-limited. Please try again later."}
+            return {"status": 429, "error": "All models are rate-limited. Please try again later."}
     except Exception as e:
         return {"error": str(e)}
 

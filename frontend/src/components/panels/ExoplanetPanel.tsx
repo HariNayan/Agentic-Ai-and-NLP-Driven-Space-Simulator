@@ -1,37 +1,72 @@
 'use client';
 import { useEffect, useState } from 'react';
 
+interface Exoplanet {
+  pl_name: string;
+  sy_dist: number;
+  pl_rade: number;
+  pl_eqt: number;
+  discoverymethod: string;
+}
+
 export default function ExoplanetPanel() {
-  const planets = [
-    { name: 'Kepler-186f', dist: '582 ly', type: 'Earth-like', esi: '0.61' },
-    { name: 'TRAPPIST-1d', dist: '39 ly', type: 'Rocky', esi: '0.90' },
-    { name: 'Proxima Cen b', dist: '4.2 ly', type: 'Rocky', esi: '0.87' },
-    { name: 'K2-18b', dist: '124 ly', type: 'Super-Earth', esi: '0.73' },
-    { name: 'LHS 1140 b', dist: '40 ly', type: 'Super-Earth', esi: '0.68' },
-  ];
-  
-  const [index, setIndex] = useState(0);
+  const [planets, setPlanets] = useState<Exoplanet[]>([]);
+  const [error, setError] = useState(false);
+
   useEffect(() => {
-    const t = setInterval(() => setIndex(i => (i + 1) % planets.length), 4000);
-    return () => clearInterval(t);
+    let mounted = true;
+    const fetchExoplanets = async () => {
+      try {
+        const r = await fetch('/api/exoplanets');
+        if (!r.ok) throw new Error('API error');
+        const data = await r.json();
+        if (!mounted) return;
+        const list: Exoplanet[] = (Array.isArray(data) ? data : data.data || []).slice(0, 8);
+        if (list.length === 0) throw new Error('Empty');
+        setPlanets(list);
+      } catch {
+        if (mounted) setError(true);
+      }
+    };
+    fetchExoplanets();
+    return () => { mounted = false; };
   }, []);
 
-  const p = planets[index];
+  if (error) {
+    return (
+      <div style={{ padding: '8px', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"Courier New", monospace', fontSize: '9px', color: '#c0473a' }}>
+        ⚡ EXOPLANET CATALOG OFFLINE
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: '12px 8px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', fontFamily: '"Courier New", monospace', background: '#0a0c14', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 2 }}>
-        <div>
-          <div style={{ fontSize: '11px', color: '#4a9fd8', fontWeight: 'bold', marginBottom: '4px' }}>{p.name}</div>
-          <div style={{ fontSize: '8px', color: '#8899aa' }}>TYPE: {p.type}</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '8px', color: '#ffaa00' }}>ESI: {p.esi}</div>
-          <div style={{ fontSize: '8px', color: '#8899aa', marginTop: '2px' }}>DIST: {p.dist}</div>
-        </div>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0a0c14' }}>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {planets.length === 0 ? (
+          <div style={{ padding: '8px', fontSize: '9px', color: '#4a5070', fontFamily: '"Courier New", monospace' }}>Loading catalog...</div>
+        ) : (
+          planets.map((p, i) => (
+            <div key={i} style={{ padding: '5px 8px', borderBottom: '1px solid #161a26' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                <span style={{ fontFamily: '"Courier New", monospace', fontSize: '9px', color: '#4a9fd8', fontWeight: 'bold' }}>{p.pl_name}</span>
+                <span style={{ fontFamily: '"Courier New", monospace', fontSize: '7px', color: '#ffaa00' }}>{p.discoverymethod || '--'}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <span style={{ fontFamily: '"Courier New", monospace', fontSize: '8px', color: '#4a5070' }}>
+                  Dist: {p.sy_dist ? `${p.sy_dist.toFixed(1)} pc` : '--'}
+                </span>
+                <span style={{ fontFamily: '"Courier New", monospace', fontSize: '8px', color: '#4a5070' }}>
+                  Radius: {p.pl_rade ? `${p.pl_rade.toFixed(2)} R⊕` : '--'}
+                </span>
+                <span style={{ fontFamily: '"Courier New", monospace', fontSize: '8px', color: '#4a5070' }}>
+                  Temp: {p.pl_eqt ? `${p.pl_eqt.toFixed(0)} K` : '--'}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
       </div>
-      <div style={{ marginTop: '12px', height: '1px', background: 'linear-gradient(90deg, #4a9fd8, transparent)', zIndex: 2 }} />
-      <div style={{ position: 'absolute', right: '-10px', top: '10px', fontSize: '60px', opacity: 0.05, fontWeight: 'bold', color: '#4a9fd8', zIndex: 1 }}>{index+1}</div>
     </div>
   );
 }

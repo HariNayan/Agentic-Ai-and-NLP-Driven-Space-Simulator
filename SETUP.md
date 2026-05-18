@@ -5,7 +5,6 @@
 ### Frontend
 
 ```bash
-cd D:/Coding/Space
 cd frontend
 npm install
 ```
@@ -13,7 +12,6 @@ npm install
 ### Backend
 
 ```bash
-cd D:/Coding/Space
 cd backend
 python -m venv venv
 venv\Scripts\activate

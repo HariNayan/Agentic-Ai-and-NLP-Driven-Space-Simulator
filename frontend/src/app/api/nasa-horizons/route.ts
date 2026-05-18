@@ -16,12 +16,17 @@ export async function GET(request: Request) {
   }
 
   try {
+    const startDate = new Date(`${dateStr}T${timeStr}:00`);
+    const stopDate = new Date(startDate.getTime() + 60000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const stopDateStr = `${stopDate.getFullYear()}-${pad(stopDate.getMonth() + 1)}-${pad(stopDate.getDate())}`;
+    const stopTimeStr = `${pad(stopDate.getHours())}:${pad(stopDate.getMinutes())}`;
     const url =
       `https://ssd.jpl.nasa.gov/api/horizons.api?` +
       `format=json&COMMAND='${nasaId}'&OBJ_DATA='NO'` +
       `&MAKE_EPHEM='YES'&EPHEM_TYPE='VECTORS'&CENTER='500@0'` +
       `&START_TIME='${dateStr} ${timeStr}'` +
-      `&STOP_TIME='${dateStr} ${timeStr}'&STEP_SIZE='1m'` +
+      `&STOP_TIME='${stopDateStr} ${stopTimeStr}'&STEP_SIZE='1m'` +
       `&VEC_TABLE='2'`;
 
     const res = await fetch(url, { next: { revalidate: 60 } });

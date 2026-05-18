@@ -4,6 +4,8 @@ const ALLOWED_NASA_PATHS = new Set([
   'DONKI/FLR',
   'mars-photos/api/v1/rovers/perseverance/latest_photos',
   'neo/rest/v1/feed',
+  'insight_weather/',
+  'planetary/apod',
 ]);
 
 export async function GET(request: NextRequest) {
