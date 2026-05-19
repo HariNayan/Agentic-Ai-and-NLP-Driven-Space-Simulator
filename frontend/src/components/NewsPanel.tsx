@@ -1,6 +1,6 @@
 'use client';
-
 import { useEffect, useState } from 'react';
+import PanelFooter from './UI/PanelFooter';
 
 interface Article {
   id: number;
@@ -15,6 +15,7 @@ export default function NewsPanel() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -26,18 +27,15 @@ export default function NewsPanel() {
         if (isMounted) {
           setArticles(data?.results ?? []);
           setLoading(false);
+          setLastUpdated(new Date());
         }
-      } catch (err) {
+      } catch {
         if (isMounted) { setLoading(false); setError(true); }
       }
     };
-
     fetchNews();
     const interval = setInterval(fetchNews, 5 * 60 * 1000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+    return () => { isMounted = false; clearInterval(interval); };
   }, []);
 
   const timeAgo = (dateStr: string) => {
@@ -47,68 +45,26 @@ export default function NewsPanel() {
   };
 
   return (
-    <div
-      style={{
-        height: '100%',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#0a0c14',
-      }}
-    >
+    <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#0a0c14' }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
         {loading && (
-          <div
-            style={{
-              padding: '8px',
-              fontFamily: "'Courier New', monospace",
-              fontSize: '9px',
-              color: '#4a5070',
-            }}
-          >
+          <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#4a5070' }}>
             Loading...
           </div>
         )}
-          {error && !loading && (
-            <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#c0473a' }}>
-              ⚠ NEWS FEED UNAVAILABLE
-            </div>
-          )}
-          {!error && articles.map((a) => (
-          <div
-            key={a.id}
-            onClick={() => window.open(a.url, '_blank')}
-            style={{
-              padding: '5px 8px',
-              borderBottom: '1px solid #161a26',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.background = '#0d1018')
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.background = 'transparent')
-            }
-          >
-            <div
-              style={{
-                fontFamily: "'Courier New', monospace",
-                fontSize: '8px',
-                color: '#6a9fd8',
-                textTransform: 'uppercase',
-                marginBottom: '2px',
-              }}
-            >
+        {error && !loading && (
+          <div style={{ padding: '8px', fontFamily: "'Courier New', monospace", fontSize: '9px', color: '#c0473a' }}>
+            ⚠ NEWS FEED UNAVAILABLE
+          </div>
+        )}
+        {!error && articles.map(a => (
+          <div key={a.id} onClick={() => window.open(a.url, '_blank')} style={{ padding: '5px 8px', borderBottom: '1px solid #161a26', cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#0d1018')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            <div style={{ fontFamily: "'Courier New', monospace", fontSize: '8px', color: '#6a9fd8', textTransform: 'uppercase', marginBottom: '2px' }}>
               {a.news_site} · {timeAgo(a.published_at)}
             </div>
-            <div
-              style={{
-                fontSize: '10px',
-                color: '#c8ccd8',
-                lineHeight: '1.35',
-                fontFamily: "'Courier New', monospace",
-              }}
-            >
+            <div style={{ fontSize: '10px', color: '#c8ccd8', lineHeight: '1.35', fontFamily: "'Courier New', monospace" }}>
               {a.title}
             </div>
           </div>
@@ -119,6 +75,7 @@ export default function NewsPanel() {
           </div>
         )}
       </div>
+      <PanelFooter source="Spaceflight News API" lastUpdated={lastUpdated} />
     </div>
   );
 }

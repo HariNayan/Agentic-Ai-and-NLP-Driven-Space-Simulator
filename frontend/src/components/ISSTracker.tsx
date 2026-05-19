@@ -1,6 +1,6 @@
 'use client';
-
 import { useEffect, useState } from 'react';
+import PanelFooter from './UI/PanelFooter';
 
 interface ISSData {
   iss_position: { latitude: string; longitude: string };
@@ -23,16 +23,13 @@ export default function ISSTracker() {
           setData(data);
           setError(false);
         }
-      } catch (err) {
+      } catch {
         if (isMounted) setError(true);
       }
     };
     fetchISS();
     const interval = setInterval(fetchISS, 10000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+    return () => { isMounted = false; clearInterval(interval); };
   }, []);
 
   const lat = data?.iss_position?.latitude ? parseFloat(data.iss_position.latitude).toFixed(2) : '--';
@@ -53,57 +50,20 @@ export default function ISSTracker() {
   ];
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#0a0c14',
-      }}
-    >
-      <div
-        style={{
-          flex: 1,
-          padding: '8px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-        }}
-      >
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0a0c14' }}>
+      <div style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         {rows.map(({ label, value, valueColor }) => (
-          <div
-            key={label}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid #161a26',
-              paddingBottom: '4px',
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "'Courier New', monospace",
-                fontSize: '8px',
-                color: '#4a5070',
-                textTransform: 'uppercase',
-                letterSpacing: '.06em',
-              }}
-            >
+          <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #161a26', paddingBottom: '4px' }}>
+            <span style={{ fontFamily: "'Courier New', monospace", fontSize: '8px', color: '#4a5070', textTransform: 'uppercase', letterSpacing: '.06em' }}>
               {label}
             </span>
-            <span
-              style={{
-                fontFamily: "'Courier New', monospace",
-                fontSize: '10px',
-                color: valueColor || '#6a9fd8',
-              }}
-            >
+            <span style={{ fontFamily: "'Courier New', monospace", fontSize: '10px', color: valueColor || '#6a9fd8' }}>
               {value}
             </span>
           </div>
         ))}
       </div>
+      <PanelFooter source="Open Notify (ISS)" lastUpdated={data ? new Date(data.timestamp * 1000) : null} />
     </div>
   );
 }

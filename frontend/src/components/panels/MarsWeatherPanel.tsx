@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import PanelFooter from '../UI/PanelFooter';
 
 interface SolData {
   sol: string;
@@ -61,13 +62,13 @@ export default function MarsWeatherPanel() {
   const [sol, setSol] = useState<SolData | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     let mounted = true;
     const fetchWeather = async () => {
       setLoading(true);
 
-      // Try REMS (Curiosity) first
       try {
         const r = await fetch('/api/rems');
         if (r.ok) {
@@ -77,6 +78,7 @@ export default function MarsWeatherPanel() {
             setSol(parsed);
             setError(false);
             setLoading(false);
+            setLastUpdated(new Date());
             return;
           }
         }
@@ -84,7 +86,6 @@ export default function MarsWeatherPanel() {
         // fall through
       }
 
-      // Fallback: InSight (archived)
       try {
         const r = await fetch('/api/nasa?path=insight_weather/&feedtype=json&ver=1.0');
         if (r.ok) {
@@ -94,6 +95,7 @@ export default function MarsWeatherPanel() {
             setSol(parsed);
             setError(false);
             setLoading(false);
+            setLastUpdated(new Date());
             return;
           }
         }
@@ -137,16 +139,19 @@ export default function MarsWeatherPanel() {
   ];
 
   return (
-    <div style={{ padding: '8px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2px', fontFamily: '"Courier New", monospace' }}>
-      <div style={{ fontSize: '8px', color: sol.archived ? '#4a5070' : '#c1440e', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>
-        MARS // {sol.source}
-      </div>
-      {sol.archived && (
-        <div style={{ fontSize: '7px', color: '#c0473a', marginBottom: '4px', letterSpacing: '0.06em' }}>
-          ⚠ ARCHIVED DATA — mission ended Dec 2022
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', fontFamily: '"Courier New", monospace' }}>
+      <div style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2px' }}>
+        <div style={{ fontSize: '8px', color: sol.archived ? '#4a5070' : '#c1440e', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>
+          MARS // {sol.source}
         </div>
-      )}
-      {rows.map(r => <Row key={r.label} label={r.label} value={r.value} />)}
+        {sol.archived && (
+          <div style={{ fontSize: '7px', color: '#c0473a', marginBottom: '4px', letterSpacing: '0.06em' }}>
+            ⚠ ARCHIVED DATA — mission ended Dec 2022
+          </div>
+        )}
+        {rows.map(r => <Row key={r.label} label={r.label} value={r.value} />)}
+      </div>
+      <PanelFooter source={sol.archived ? "InSight (archived)" : "Curiosity REMS"} lastUpdated={lastUpdated} />
     </div>
   );
 }

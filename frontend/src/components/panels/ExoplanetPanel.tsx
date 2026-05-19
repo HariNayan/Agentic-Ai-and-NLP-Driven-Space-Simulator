@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import PanelFooter from '../UI/PanelFooter';
 
 interface Exoplanet {
   pl_name: string;
@@ -12,6 +13,7 @@ interface Exoplanet {
 export default function ExoplanetPanel() {
   const [planets, setPlanets] = useState<Exoplanet[]>([]);
   const [error, setError] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -24,6 +26,7 @@ export default function ExoplanetPanel() {
         const list: Exoplanet[] = (Array.isArray(data) ? data : data.data || []).slice(0, 8);
         if (list.length === 0) throw new Error('Empty');
         setPlanets(list);
+        setLastUpdated(new Date());
       } catch {
         if (mounted) setError(true);
       }
@@ -67,6 +70,7 @@ export default function ExoplanetPanel() {
           ))
         )}
       </div>
+      <PanelFooter source="NASA Exoplanet Archive (IPAC)" lastUpdated={lastUpdated} />
     </div>
   );
 }
