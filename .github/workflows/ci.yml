@@ -32,5 +32,8 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r requirements.txt
         working-directory: backend
-      - run: pytest
+      - name: Run pytest
         working-directory: backend
+        env:
+          PYTHONPATH: .
+        run: pytest
