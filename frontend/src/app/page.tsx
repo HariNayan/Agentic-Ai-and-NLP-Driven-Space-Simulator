@@ -30,6 +30,7 @@ const SceneContent = dynamic(() => import('@/components/SceneContent'), {
 });
 
 import ChatPanel from '@/components/UI/ChatPanel';
+import PanelFooter from '@/components/UI/PanelFooter';
 import NewsPanel from '@/components/NewsPanel';
 import ISSTracker from '@/components/ISSTracker';
 import AsteroidPanel from '@/components/AsteroidPanel';
@@ -275,13 +276,18 @@ const Home = memo(function Home() {
           {/* Row 1 */}
           <div style={{ gridColumn: 'span 2' }}>
             <Panel header={{ title: 'LIVE FEED // NASA', status: '● REC', statusColor: '#ff0000' }}>
-              <iframe
-                width="100%" height="100%"
-                src="https://www.youtube.com/embed/3F0XlKxaqbk?autoplay=1&mute=1"
-                title="NASA Live Stream" frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen style={{ border: 'none' }}
-              />
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ flex: 1 }}>
+                  <iframe
+                    width="100%" height="100%"
+                    src="https://www.youtube.com/embed/3F0XlKxaqbk?autoplay=1&mute=1"
+                    title="NASA Live Stream" frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen style={{ border: 'none' }}
+                  />
+                </div>
+                <PanelFooter source="NASA Live (YouTube)" lastUpdated={null} updatedLabel="LIVE" />
+              </div>
             </Panel>
           </div>
           <div style={{ gridColumn: 'span 2' }}>
@@ -296,13 +302,18 @@ const Home = memo(function Home() {
           </div>
           <div style={{ gridColumn: 'span 1' }}>
             <Panel header={{ title: 'LIVE LAUNCH FEED', status: '● REC', statusColor: '#ff0000' }}>
-              <iframe
-                width="100%" height="100%"
-                src="https://www.youtube.com/embed/wbSwFU6tY1c?autoplay=1&mute=1&loop=1"
-                title="Launch Live Stream" frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen style={{ border: 'none' }}
-              />
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ flex: 1 }}>
+                  <iframe
+                    width="100%" height="100%"
+                    src="https://www.youtube.com/embed/wbSwFU6tY1c?autoplay=1&mute=1&loop=1"
+                    title="Launch Live Stream" frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen style={{ border: 'none' }}
+                  />
+                </div>
+                <PanelFooter source="Launch Feed (YouTube)" lastUpdated={null} updatedLabel="LIVE" />
+              </div>
             </Panel>
           </div>
 

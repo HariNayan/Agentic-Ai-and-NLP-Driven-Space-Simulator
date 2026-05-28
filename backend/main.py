@@ -8,7 +8,7 @@ import os
 import traceback
 from dotenv import load_dotenv
 
-from agents import memory, curriculum, agent_with_tools, build_tool_context_prompt
+from agents import memory, curriculum, agent_with_tools, build_tool_context_prompt, record_quiz_result
 
 load_dotenv()
 
@@ -43,6 +43,12 @@ class ChatRequest(BaseModel):
     user_level: str = "beginner"
     session_id: str = "default"
     history: list[ChatHistoryItem] = Field(default_factory=list)
+
+
+class QuizResultRequest(BaseModel):
+    session_id: str = "default"
+    planet: str
+    correct: bool
 
 
 def format_request_history(history: list[ChatHistoryItem], max_turns: int = 10) -> str:
@@ -103,6 +109,7 @@ async def chat(request: ChatRequest):
             memory.add_message(sid, "assistant", f"Quiz about {target}")
             return JSONResponse(content={
                 "intent": "quiz",
+                "target": target,
                 "quiz": quiz
             })
 
@@ -110,14 +117,22 @@ async def chat(request: ChatRequest):
         system_prompt = SYSTEM_PROMPT_EXPLAINER_ADVANCED.format(planet=target) if user_level == "advanced" else SYSTEM_PROMPT_EXPLAINER_BEGINNER.format(planet=target)
         messages, tool_used = await agent_with_tools(request.message, target, user_level, history)
 
+        direct_response = ""
         if tool_used:
             memory.add_tool_result(sid, tool_used, messages[-1]["content"])
             explain_prompt = build_tool_context_prompt(history, request.message, [tool_used], [messages[-1]["content"]])
         else:
-            explain_prompt = f"Conversation history:\n{history}\n\nCurrent question: {request.message}"
+            direct_response = messages[-1]["content"]
+            explain_prompt = ""
 
         async def token_stream():
             full_response = ""
+            if direct_response:
+                full_response = direct_response
+                yield f"data: {json.dumps({'token': direct_response})}\n\n"
+                memory.add_message(sid, "assistant", full_response)
+                return
+
             async for token in call_llm_stream(explain_prompt, system_prompt):
                 if token == "RATE_LIMITED":
                     yield f"data: {json.dumps({'token': 'AI is rate-limited. Please wait and try again.'})}\n\n"
@@ -146,8 +161,15 @@ async def chat(request: ChatRequest):
 
 @app.post("/api/session/clear")
 async def clear_session(session_id: str = "default"):
-    """Clear session memory (no-op — history managed by browser)."""
+    """Clear session memory and curriculum progress for a browser session."""
+    memory.clear(session_id)
+    curriculum.clear(session_id)
     return {"status": "cleared", "session_id": session_id}
+
+
+@app.post("/api/curriculum/quiz-result")
+async def submit_quiz_result(request: QuizResultRequest):
+    return record_quiz_result(request.session_id, request.planet, request.correct)
 
 
 @app.get("/api/test")

@@ -3,8 +3,8 @@ import json
 from unittest.mock import AsyncMock, patch
 from agents import (
     classify_intent, safe_json_parse, ConversationMemory, Curriculum,
-    execute_tool, determine_navigation_fallback, quiz_agent,
-    QUIZ_BANK, DEFAULT_QUIZ, PLANET_DB, CELESTIAL_BODIES, memory,
+    execute_tool, determine_navigation_fallback, quiz_agent, record_quiz_result,
+    QUIZ_BANK, DEFAULT_QUIZ, PLANET_DB, memory,
 )
 
 # ── classify_intent ───────────────────────────────────────────────────────────
@@ -54,10 +54,10 @@ class TestClassifyIntent:
         assert intent == "quiz"
         assert target == "Moon"
 
-    def test_asteroid_belt_handling(self):
+    def test_unsupported_navigation_target_falls_back_to_current_planet(self):
         intent, target = classify_intent("go to asteroid belt", "Earth")
         assert intent == "navigate"
-        assert target == "Asteroid belt"
+        assert target == "Earth"
 
     def test_case_insensitivity(self):
         intent, target = classify_intent("TAKE ME TO MARS", "Earth")
@@ -217,6 +217,46 @@ class TestCurriculum:
         assert "orbits" in ids
 
 
+class TestRecordQuizResult:
+    def test_wrong_answer_does_not_advance_curriculum(self):
+        session_id = "quiz_wrong"
+        memory.clear(session_id)
+        from agents import curriculum
+        curriculum.clear(session_id)
+
+        result = record_quiz_result(session_id, "Earth", False)
+
+        assert result["correct"] is False
+        assert result["lesson_completed"] is False
+        assert result["level"] == "beginner"
+
+    def test_correct_answer_completes_matching_next_lesson(self):
+        session_id = "quiz_complete"
+        memory.clear(session_id)
+        from agents import curriculum
+        curriculum.clear(session_id)
+
+        result = record_quiz_result(session_id, "Earth", True)
+
+        assert result["correct"] is True
+        assert result["lesson_completed"] is True
+        assert result["completed_lesson"]["id"] == "intro"
+        assert result["level"] == "beginner"
+        assert result["next_lesson"]["id"] == "inner"
+
+    def test_correct_answer_on_non_matching_planet_does_not_advance(self):
+        session_id = "quiz_skip"
+        memory.clear(session_id)
+        from agents import curriculum
+        curriculum.clear(session_id)
+
+        result = record_quiz_result(session_id, "Mars", True)
+
+        assert result["correct"] is True
+        assert result["lesson_completed"] is False
+        assert result["level"] == "beginner"
+
+
 # ── execute_tool ──────────────────────────────────────────────────────────────
 
 class TestExecuteTool:
@@ -287,9 +327,9 @@ class TestDetermineNavigationFallback:
         result = determine_navigation_fallback("show me something")
         assert result.target == "Earth"
 
-    def test_asteroid_belt(self):
+    def test_unsupported_target_defaults_to_earth(self):
         result = determine_navigation_fallback("go to asteroid belt")
-        assert result.target == "Asteroid Belt"
+        assert result.target == "Earth"
 
     def test_pronoun_fallback_uses_history(self):
         memory.clear("pronoun_test")

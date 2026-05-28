@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useSpaceStore, useChatSelector, useProcessingSelector } from '@/store/spaceStore';
+import PanelFooter from './PanelFooter';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
 
@@ -16,24 +17,17 @@ interface ChatMessageWithStreaming {
     options: string[];
     correct: string;
     explanation: string;
+    planet?: string;
   };
   answered?: boolean;
   selectedAnswer?: string;
 }
 
-function handleQuizAnswer(
-  selected: string,
-  quiz: ChatMessageWithStreaming['quiz'],
-  messageId: string
+function renderQuizMessage(
+  msg: ChatMessageWithStreaming,
+  i: number,
+  onAnswer: (selected: string, quiz: ChatMessageWithStreaming['quiz'], messageId: string) => void
 ) {
-  if (!quiz) return;
-  useSpaceStore.getState().updateMessage(messageId, {
-    answered: true,
-    selectedAnswer: selected,
-  });
-}
-
-function renderQuizMessage(msg: ChatMessageWithStreaming, i: number) {
   if (msg.content !== '__QUIZ__' || !msg.quiz) return null;
   const quiz = msg.quiz;
 
@@ -44,7 +38,7 @@ function renderQuizMessage(msg: ChatMessageWithStreaming, i: number) {
         {quiz.options.map((option, idx) => (
           <button
             key={idx}
-            onClick={() => handleQuizAnswer(option, quiz, msg.id)}
+            onClick={() => onAnswer(option, quiz, msg.id)}
             disabled={msg.answered}
             className={
               msg.answered
@@ -74,15 +68,65 @@ export default memo(function ChatPanel() {
   const isProcessing = useProcessingSelector();
   const addChatMessage = useSpaceStore((state) => state.addChatMessage);
   const setProcessing = useSpaceStore((state) => state.setProcessing);
+  const updateMessage = useSpaceStore((state) => state.updateMessage);
   // Stable session ID — generated once per component mount so conversation
   // history is preserved across all messages in this browser tab.
   const sessionId = useRef(`session_${Date.now()}`);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastAssistantMessage = [...chatHistory].reverse().find((msg) => msg.role === 'assistant');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory]);
+
+  const handleQuizAnswer = useCallback(async (
+    selected: string,
+    quiz: ChatMessageWithStreaming['quiz'],
+    messageId: string
+  ) => {
+    if (!quiz) return;
+
+    updateMessage(messageId, {
+      answered: true,
+      selectedAnswer: selected,
+    });
+
+    const planet = quiz.planet ?? selectedPlanet;
+    const correct = selected === quiz.correct;
+    if (!correct) return;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/curriculum/quiz-result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId.current,
+          planet,
+          correct: true,
+        }),
+      });
+
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.lesson_completed) return;
+
+      const completedTitle = data.completed_lesson?.title;
+      const level = String(data.level ?? '').toUpperCase();
+      const nextLessonTitle = data.next_lesson?.title;
+
+      if (completedTitle) {
+        addChatMessage(
+          'assistant',
+          nextLessonTitle
+            ? `Curriculum updated: completed "${completedTitle}". Current level: ${level}. Next lesson: "${nextLessonTitle}".`
+            : `Curriculum updated: completed "${completedTitle}". Current level: ${level}.`
+        );
+      }
+    } catch {
+      // Keep quiz UX local even if progress sync fails.
+    }
+  }, [addChatMessage, selectedPlanet, updateMessage]);
 
   const doChatRequest = useCallback(async (
     retryCount = 0,
@@ -243,7 +287,7 @@ export default memo(function ChatPanel() {
                 role: 'assistant',
                 content: '__QUIZ__',
                 timestamp: Date.now(),
-                quiz: data.quiz,
+                quiz: { ...data.quiz, planet: data.target ?? selectedPlanet },
               },
             ],
           }));
@@ -309,7 +353,8 @@ export default memo(function ChatPanel() {
         {chatHistory.map((msg, i) => {
           const quizComponent = renderQuizMessage(
             msg as ChatMessageWithStreaming,
-            i
+            i,
+            handleQuizAnswer
           );
           if (quizComponent) return quizComponent;
 
@@ -441,6 +486,10 @@ export default memo(function ChatPanel() {
           SEND
         </button>
       </form>
+      <PanelFooter
+        source="FastAPI / NVIDIA-hosted models"
+        lastUpdated={lastAssistantMessage ? new Date(lastAssistantMessage.timestamp) : null}
+      />
     </div>
   );
 });

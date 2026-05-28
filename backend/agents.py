@@ -27,7 +27,20 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-CELESTIAL_BODIES = ["sun", "mercury", "venus", "earth", "moon", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto", "asteroid belt"]
+BODY_NAME_MAP = {
+    "sun": "Sun",
+    "mercury": "Mercury",
+    "venus": "Venus",
+    "earth": "Earth",
+    "moon": "Moon",
+    "mars": "Mars",
+    "jupiter": "Jupiter",
+    "saturn": "Saturn",
+    "uranus": "Uranus",
+    "neptune": "Neptune",
+}
+QUIZ_BODIES = list(BODY_NAME_MAP.keys())
+NAVIGATION_BODIES = ["sun", "mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"]
 NAVIGATE_KEYWORDS = ["go to", "take me", "navigate to", "travel to", "fly to", "visit", "show me", "zoom to"]
 QUIZ_KEYWORDS = ["quiz", "test me", "question", "mcq", "multiple choice", "ask me"]
 
@@ -138,6 +151,10 @@ class Curriculum:
         level = self.get_user_level(session_id)
         return LESSONS.get(level, [])
 
+    def clear(self, session_id: str):
+        if session_id in self.progress:
+            del self.progress[session_id]
+
 curriculum = Curriculum()
 
 # ── Tool Execution ───────────────────────────────────────────────────────────
@@ -200,15 +217,15 @@ def classify_intent(message: str, current_planet: str) -> tuple[str, str]:
     msg_lower = message.lower()
     for kw in QUIZ_KEYWORDS:
         if kw in msg_lower:
-            for body in CELESTIAL_BODIES:
+            for body in QUIZ_BODIES:
                 if body in msg_lower:
-                    return "quiz", body.capitalize()
+                    return "quiz", BODY_NAME_MAP[body]
             return "quiz", current_planet
     for kw in NAVIGATE_KEYWORDS:
         if kw in msg_lower:
-            for body in CELESTIAL_BODIES:
+            for body in NAVIGATION_BODIES:
                 if body in msg_lower:
-                    return "navigate", body.capitalize()
+                    return "navigate", BODY_NAME_MAP[body]
             return "navigate", current_planet
     return "explain", current_planet
 
@@ -229,9 +246,17 @@ Classify intent and extract target. Return ONLY JSON. No markdown.
             return classify_intent(message, current_planet)
         parsed = safe_json_parse(content, {})
         intent = parsed.get("intent", "explain")
-        target = parsed.get("target", current_planet).capitalize()
         if intent not in ("explain", "navigate", "quiz"):
             intent = "explain"
+        raw_target = str(parsed.get("target", current_planet)).strip().lower()
+        if intent == "navigate":
+            target = BODY_NAME_MAP.get(raw_target, current_planet)
+            if raw_target not in NAVIGATION_BODIES:
+                target = current_planet
+        elif intent == "quiz":
+            target = BODY_NAME_MAP.get(raw_target, current_planet)
+        else:
+            target = BODY_NAME_MAP.get(raw_target, parsed.get("target", current_planet).capitalize())
         return intent, target
     except Exception:
         return classify_intent(message, current_planet)
@@ -450,8 +475,40 @@ async def quiz_agent(planet: str) -> dict:
         return QUIZ_BANK.get(planet, DEFAULT_QUIZ)
 
 
+def record_quiz_result(session_id: str, planet: str, correct: bool) -> dict:
+    current_level = curriculum.get_user_level(session_id)
+    next_lesson = curriculum.get_next_lesson(session_id)
+
+    if not correct:
+        return {
+            "correct": False,
+            "lesson_completed": False,
+            "level": current_level,
+            "next_lesson": next_lesson,
+        }
+
+    if not next_lesson or next_lesson["quiz_planet"] != planet:
+        return {
+            "correct": True,
+            "lesson_completed": False,
+            "level": current_level,
+            "next_lesson": next_lesson,
+        }
+
+    completed_lesson = next_lesson
+    curriculum.complete_lesson(session_id, completed_lesson["id"])
+    new_level = curriculum.get_user_level(session_id)
+
+    return {
+        "correct": True,
+        "lesson_completed": True,
+        "completed_lesson": completed_lesson,
+        "level": new_level,
+        "next_lesson": curriculum.get_next_lesson(session_id),
+    }
+
+
 def determine_navigation_fallback(prompt: str, session_id: str = "default") -> CameraAction:
-    celestial_bodies = ["sun", "mercury", "venus", "earth", "moon", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto", "asteroid belt"]
     prompt_lower = prompt.lower()
     detected_body = None
     detected_action = "focus"
@@ -460,15 +517,15 @@ def determine_navigation_fallback(prompt: str, session_id: str = "default") -> C
         history = memory.get_history(session_id)
         for msg in reversed(history):
             if msg["role"] == "assistant":
-                for body in celestial_bodies:
+                for body in NAVIGATION_BODIES:
                     if body in msg["content"].lower():
-                        detected_body = body.capitalize()
+                        detected_body = BODY_NAME_MAP[body]
                         break
                 break
     if not detected_body:
-        for body in celestial_bodies:
+        for body in NAVIGATION_BODIES:
             if body in prompt_lower:
-                detected_body = body.capitalize() if body != "asteroid belt" else "Asteroid Belt"
+                detected_body = BODY_NAME_MAP[body]
                 break
     if "zoom" in prompt_lower or "closer" in prompt_lower:
         detected_action = "zoom"

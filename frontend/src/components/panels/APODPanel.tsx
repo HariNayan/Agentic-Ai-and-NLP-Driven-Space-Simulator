@@ -18,21 +18,51 @@ export default function APODPanel() {
 
   useEffect(() => {
     let mounted = true;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const getUtcApodDate = () => new Date().toISOString().slice(0, 10);
+    const msUntilNextUtcDay = () => {
+      const now = new Date();
+      const nextUtcMidnight = Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() + 1,
+        0,
+        1,
+        0
+      );
+      return Math.max(nextUtcMidnight - now.getTime(), 60_000);
+    };
+
     const fetchAPOD = async () => {
       try {
-        const r = await fetch('/api/nasa?path=planetary/apod');
+        const r = await fetch(`/api/nasa?path=planetary/apod&date=${getUtcApodDate()}`);
         if (!r.ok) throw new Error('API error');
         const d = await r.json();
         if (mounted) {
           setData(d);
+          setError(false);
           setLastUpdated(new Date());
         }
       } catch {
         if (mounted) setError(true);
       }
     };
+
+    const scheduleNextRefresh = () => {
+      refreshTimer = setTimeout(async () => {
+        await fetchAPOD();
+        if (mounted) scheduleNextRefresh();
+      }, msUntilNextUtcDay());
+    };
+
     fetchAPOD();
-    return () => { mounted = false; };
+    scheduleNextRefresh();
+
+    return () => {
+      mounted = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
   }, []);
 
   if (error) {
