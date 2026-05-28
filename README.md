@@ -78,8 +78,8 @@ Space Monitor turns *raw space data into an immersive human + AI command center*
 ### 1. Clone
 
 ```bash
-git clone https://github.com/HariNayan/Agentic-Ai-and-NLP-Driven-Space-Simulator.git
-cd Agentic-Ai-and-NLP-Driven-Space-Simulator
+git clone https://github.com/HariNayan/Space-Monitor-AI.git
+cd Space-Monitor-AI
 ```
 
 ### 2. Backend
@@ -91,11 +91,12 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-Create `backend/.env`:
+Create `backend/.env` from `backend/.env.example`:
 
 ```env
 NVIDIA_API_KEY=nvapi-your-key-here
 MODEL=minimax-m2.7
+FRONTEND_ORIGIN=http://localhost:3000
 ```
 
 Start:
@@ -114,7 +115,8 @@ npm install
 Create `frontend/.env.local`:
 
 ```env
-NEXT_PUBLIC_NASA_API_KEY=your-nasa-api-key-here
+NASA_API_KEY=your-nasa-api-key-here
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 ```
 
 Start:
@@ -473,7 +475,7 @@ Space/
 ├── .gitignore
 │
 ├── backend/                          # FastAPI Python backend
-│   ├── .env                          # OPENROUTER_API_KEY, MODEL
+│   ├── .env                          # NVIDIA_API_KEY, MODEL, FRONTEND_ORIGIN
 │   ├── main.py                       # FastAPI app, routes, CORS, SSE streaming
 │   ├── agents.py                     # AI agent system (orchestrator, tools, memory, curriculum, quiz)
 │   ├── schemas.py                    # Pydantic models
@@ -483,7 +485,7 @@ Space/
 │       └── test_agents.py            # 52 agent routing tests
 │
 ├── frontend/                         # Next.js 16 frontend
-│   ├── .env.local                    # NASA API key
+│   ├── .env.local                    # NASA_API_KEY, NEXT_PUBLIC_BACKEND_URL
 │   ├── package.json
 │   ├── tsconfig.json                 # strict: true
 │   ├── vitest.config.ts
@@ -546,12 +548,14 @@ Space/
 |----------|----------|-------------|
 | `NVIDIA_API_KEY` | ✅ | NVIDIA API key for LLM inference |
 | `MODEL` | ❌ | Primary model (default: `minimax-m2.7`) |
+| `FRONTEND_ORIGIN` | ❌ | Comma-separated CORS allowlist for the backend |
 
 ### Frontend (`frontend/.env.local`)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NEXT_PUBLIC_NASA_API_KEY` | ❌ | NASA API key (falls back to `DEMO_KEY`) |
+| `NASA_API_KEY` | ❌ | NASA API key for Next.js server-side API routes (falls back to `DEMO_KEY`) |
+| `NEXT_PUBLIC_BACKEND_URL` | ❌ | Browser-visible FastAPI base URL (defaults to `http://localhost:8000`) |
 
 ---
 
